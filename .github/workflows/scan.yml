@@ -1,0 +1,44 @@
+name: Scan for bounties
+
+on:
+  schedule:
+    - cron: "30 2 * * *"   # every day at 08:00 IST
+  workflow_dispatch: {}     # lets you run it manually from the Actions tab
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run scanner
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAX_RESULTS: "40"
+          # LANGS: "python,typescript"   # uncomment to filter by language
+        run: python scanner/scan.py
+
+      - name: Commit updated feed
+        run: |
+          git config user.name "bounty-bot"
+          git config user.email "bounty-bot@users.noreply.github.com"
+          git add BOUNTIES.md
+          git diff --cached --quiet || git commit -m "chore: update bounty feed"
+          git push
+
+      - name: Open a digest issue (GitHub emails you this)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --title "Bounty digest $(date -u +%F)" \
+            --body-file digest.md \
+            --assignee "${{ github.repository_owner }}"
